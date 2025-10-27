@@ -54,9 +54,12 @@ jobs:
         aws-region: ${{ secrets.AWS_REGION }}
         # setted this to true to ensure AWS CLI v2 is available
         mask-aws-account-id: true 
-        
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: 'v1.30.0'      
    
-    
     - name: Check AWS CLI Version
       run: aws --version
 
@@ -78,3 +81,4 @@ jobs:
       
     - name: Rollout Status Check
       run: kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT_NAME }} --timeout=5m
+
