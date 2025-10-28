@@ -62,7 +62,7 @@ jobs:
    
     - name: Check AWS CLI Version
       run: aws --version
-
+      #debugging 
     - name: Verify CLI tools
       run: |
         aws --version
