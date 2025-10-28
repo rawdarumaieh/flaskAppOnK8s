@@ -38,47 +38,51 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-deploy:
-  needs: build_and_push
-  runs-on: ubuntu-latest
-  steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+  deploy:
+    needs: build_and_push # no need to run it if build failed
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  - name: Install AWS CLI v2
-    uses: aws-actions/setup-aws-cli@v2
-    with:
-      version: v2
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        # setted this to true to ensure AWS CLI v2 is available
+        mask-aws-account-id: true 
 
-  - name: Configure AWS Credentials
-    uses: aws-actions/configure-aws-credentials@v4
-    with:
-      aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      aws-region: ${{ secrets.AWS_REGION }}
-      mask-aws-account-id: true
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: 'v1.30.0'      
+   
+    - name: Check AWS CLI Version
+      run: aws --version
 
-  - name: Install kubectl
-    uses: azure/setup-kubectl@v4
-    with:
-      version: 'v1.30.0'
+    - name: Verify CLI tools
+      run: |
+        aws --version
+        which aws
+        kubectl version --client
 
-  - name: Verify CLI tools
-    run: |
-      aws --version
-      which aws
-      kubectl version --client
+    
+    - name: Update Kubeconfig
 
-  - name: Update Kubeconfig
-    run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}                  
 
-  - name: Update Deployment Image
-    run: |
-      NEW_IMAGE_TAG="${{ env.DOCKER_IMAGE_PATH }}:${{ github.sha }}"
-      kubectl set image deployment/${{ env.K8S_DEPLOYMENT_NAME }} flask-app-container=${NEW_IMAGE_TAG} --record
+    - name: Update Deployment Image
+      run: |
+        NEW_IMAGE_TAG="${{ env.DOCKER_IMAGE_PATH }}:${{ github.sha }}"
+        kubectl set image deployment/${{ env.K8S_DEPLOYMENT_NAME }} flask-app-container=${NEW_IMAGE_TAG} --record
+        
+    
+    - name: Apply for Monitoring and Service Definitions
+      run: kubectl apply -f ${{ env.K8S_MANIFESTS_PATH }}/
+      
+    - name: Rollout Status Check
+      run: kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT_NAME }} --timeout=5m
 
-  - name: Apply for Monitoring and Service Definitions
-    run: kubectl apply -f ${{ env.K8S_MANIFESTS_PATH }}/
-
-  - name: Rollout Status Check
-    run: kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT_NAME }} --timeout=5m
